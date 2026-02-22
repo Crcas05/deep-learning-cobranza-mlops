@@ -5,91 +5,94 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 
-# ==============================
-# Configuración de rutas
-# ==============================
 
-GOLD_TRAIN_PATH = "data/gold/train.parquet"
-MODEL_PATH = "models/local/"
-ARTIFACTS_PATH = "artifacts/"
+def train_model():
 
-os.makedirs(MODEL_PATH, exist_ok=True)
-os.makedirs(ARTIFACTS_PATH, exist_ok=True)
+    # ==============================
+    # Configuración de rutas
+    # ==============================
 
-print("Cargando dataset Gold...")
+    GOLD_TRAIN_PATH = "data/gold/train.parquet"
+    MODEL_PATH = "models/local/"
+    ARTIFACTS_PATH = "artifacts/"
 
-df = pd.read_parquet(GOLD_TRAIN_PATH)
+    os.makedirs(MODEL_PATH, exist_ok=True)
+    os.makedirs(ARTIFACTS_PATH, exist_ok=True)
 
-TARGET = "pago_30d"
+    print("Cargando dataset Gold...")
 
-X = df.drop(columns=[TARGET]).values
-y = df[TARGET].values
+    df = pd.read_parquet(GOLD_TRAIN_PATH)
 
-# ==============================
-# Definición del modelo
-# ==============================
+    TARGET = "pago_30d"
 
-model = tf.keras.Sequential([
-    tf.keras.layers.Dense(64, activation="relu", input_shape=(X.shape[1],)),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dropout(0.3),
+    X = df.drop(columns=[TARGET]).values
+    y = df[TARGET].values
 
-    tf.keras.layers.Dense(32, activation="relu"),
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dropout(0.2),
+    # ==============================
+    # Definición del modelo
+    # ==============================
 
-    tf.keras.layers.Dense(1, activation="sigmoid")
-])
+    model = tf.keras.Sequential([
+        tf.keras.layers.Dense(64, activation="relu", input_shape=(X.shape[1],)),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.Dropout(0.3),
 
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
-    loss="binary_crossentropy",
-    metrics=[
-        tf.keras.metrics.AUC(name="auc"),
-        tf.keras.metrics.Precision(name="precision"),
-        tf.keras.metrics.Recall(name="recall")
-    ]
-)
+        tf.keras.layers.Dense(32, activation="relu"),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.Dropout(0.2),
 
-print("Entrenando modelo...")
+        tf.keras.layers.Dense(1, activation="sigmoid")
+    ])
 
-history = model.fit(
-    X,
-    y,
-    epochs=20,
-    batch_size=256,
-    validation_split=0.2,
-    verbose=1
-)
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+        loss="binary_crossentropy",
+        metrics=[
+            tf.keras.metrics.AUC(name="auc"),
+            tf.keras.metrics.Precision(name="precision"),
+            tf.keras.metrics.Recall(name="recall")
+        ]
+    )
 
-# ==============================
-# Evaluación final
-# ==============================
+    print("Entrenando modelo...")
 
-y_pred_proba = model.predict(X)
-y_pred = (y_pred_proba > 0.5).astype(int)
+    history = model.fit(
+        X,
+        y,
+        epochs=20,
+        batch_size=256,
+        validation_split=0.2,
+        verbose=1
+    )
 
-auc = roc_auc_score(y, y_pred_proba)
-precision = precision_score(y, y_pred)
-recall = recall_score(y, y_pred)
+    # ==============================
+    # Evaluación final
+    # ==============================
 
-metrics = {
-    "AUC": float(auc),
-    "Precision": float(precision),
-    "Recall": float(recall)
-}
+    y_pred_proba = model.predict(X)
+    y_pred = (y_pred_proba > 0.5).astype(int)
 
-print("Resultados del modelo:")
-print(metrics)
+    auc = roc_auc_score(y, y_pred_proba)
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
 
-# ==============================
-# Guardar modelo y métricas
-# ==============================
+    metrics = {
+        "AUC": float(auc),
+        "Precision": float(precision),
+        "Recall": float(recall)
+    }
 
-model.save(os.path.join(MODEL_PATH, "model.keras"))
+    print("Resultados del modelo:")
+    print(metrics)
 
-with open(os.path.join(ARTIFACTS_PATH, "metrics.json"), "w") as f:
-    json.dump(metrics, f, indent=4)
+    # ==============================
+    # Guardar modelo y métricas
+    # ==============================
 
-print("✔ Modelo guardado en models/local/")
-print("✔ Métricas guardadas en artifacts/")
+    model.save(os.path.join(MODEL_PATH, "model.keras"))
+
+    with open(os.path.join(ARTIFACTS_PATH, "metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    print("✔ Modelo guardado en models/local/")
+    print("✔ Métricas guardadas en artifacts/")
