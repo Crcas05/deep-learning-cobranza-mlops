@@ -3,61 +3,64 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import joblib
 
-# ==============================
-# Rutas
-# ==============================
 
-BRONZE_PATH = "data/bronze/cobranza_sintetica.csv"
-SILVER_PATH = "data/silver/"
-ARTIFACTS_PATH = "artifacts/"
+def process_silver():
 
-os.makedirs(SILVER_PATH, exist_ok=True)
-os.makedirs(ARTIFACTS_PATH, exist_ok=True)
+    # ==============================
+    # Rutas
+    # ==============================
 
-print("Cargando datos Bronze...")
-df = pd.read_csv(BRONZE_PATH)
+    BRONZE_PATH = "data/bronze/cobranza_sintetica.csv"
+    SILVER_PATH = "data/silver/"
+    ARTIFACTS_PATH = "artifacts/"
 
-# ==============================
-# Limpieza básica
-# ==============================
+    os.makedirs(SILVER_PATH, exist_ok=True)
+    os.makedirs(ARTIFACTS_PATH, exist_ok=True)
 
-df = df.drop_duplicates()
-df = df.dropna()
+    print("Cargando datos Bronze...")
+    df = pd.read_csv(BRONZE_PATH)
 
-# ==============================
-# Feature Engineering
-# ==============================
+    # ==============================
+    # Limpieza básica
+    # ==============================
 
-df["ratio_pago_mora"] = df["porcentaje_pago_historico"] / (df["dias_mora_actual"] + 1)
-df["ingreso_deuda_ratio"] = df["ingresos_estimados"] / (df["monto_deuda"] + 1)
+    df = df.drop_duplicates()
+    df = df.dropna()
 
-TARGET = "pago_30d"
+    # ==============================
+    # Feature Engineering
+    # ==============================
 
-X = df.drop(columns=[TARGET])
-y = df[TARGET]
+    df["ratio_pago_mora"] = df["porcentaje_pago_historico"] / (df["dias_mora_actual"] + 1)
+    df["ingreso_deuda_ratio"] = df["ingresos_estimados"] / (df["monto_deuda"] + 1)
 
-# ==============================
-# Escalado
-# ==============================
+    TARGET = "pago_30d"
 
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+    X = df.drop(columns=[TARGET])
+    y = df[TARGET]
 
-# Guardar scaler
-joblib.dump(scaler, os.path.join(ARTIFACTS_PATH, "scaler.pkl"))
+    # ==============================
+    # Escalado
+    # ==============================
 
-# Reconstruir dataframe escalado
-df_silver = pd.DataFrame(X_scaled, columns=X.columns)
-df_silver[TARGET] = y.values
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
-# ==============================
-# Guardar Silver en Parquet
-# ==============================
+    # Guardar scaler
+    joblib.dump(scaler, os.path.join(ARTIFACTS_PATH, "scaler.pkl"))
 
-df_silver.to_parquet(
-    os.path.join(SILVER_PATH, "cobranza_clean.parquet"),
-    index=False
-)
+    # Reconstruir dataframe escalado
+    df_silver = pd.DataFrame(X_scaled, columns=X.columns)
+    df_silver[TARGET] = y.values
 
-print("✔ Silver generado correctamente.")
-print("✔ Scaler guardado en artifacts/")
+    # ==============================
+    # Guardar Silver en Parquet
+    # ==============================
+
+    df_silver.to_parquet(
+        os.path.join(SILVER_PATH, "cobranza_clean.parquet"),
+        index=False
+    )
+
+    print("✔ Silver generado correctamente.")
+    print("✔ Scaler guardado en artifacts/")
