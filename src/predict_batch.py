@@ -4,64 +4,66 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 
-# ==============================
-# Rutas
-# ==============================
 
-MODEL_PATH = "models/local/model.keras"
-SCALER_PATH = "artifacts/scaler.pkl"
-SILVER_PATH = "data/silver/cobranza_clean.parquet"
-OUTPUT_PATH = "artifacts/scoring_results.parquet"
+def batch_predict():
 
-print("Cargando modelo...")
-model = tf.keras.models.load_model(MODEL_PATH)
+    # ==============================
+    # Rutas
+    # ==============================
 
-print("Cargando scaler...")
-scaler = joblib.load(SCALER_PATH)
+    MODEL_PATH = "models/local/model.keras"
+    SCALER_PATH = "artifacts/scaler.pkl"
+    SILVER_PATH = "data/silver/cobranza_clean.parquet"
+    OUTPUT_PATH = "artifacts/scoring_results.parquet"
 
-print("Cargando datos Silver...")
-df = pd.read_parquet(SILVER_PATH)
+    print("Cargando modelo...")
+    model = tf.keras.models.load_model(MODEL_PATH)
 
-TARGET = "pago_30d"
+    print("Cargando scaler...")
+    scaler = joblib.load(SCALER_PATH)
 
-# Guardamos copia original para scoring
-df_scoring = df.copy()
+    print("Cargando datos Silver...")
+    df = pd.read_parquet(SILVER_PATH)
 
-# Separar features
-X = df.drop(columns=[TARGET]).values
+    TARGET = "pago_30d"
 
-# Escalar
-X_scaled = scaler.transform(X)
+    df_scoring = df.copy()
 
-# ==============================
-# Predicción
-# ==============================
+    # Separar features
+    X = df.drop(columns=[TARGET]).values
 
-print("Generando predicciones...")
-probs = model.predict(X_scaled)
+    # Escalar
+    X_scaled = scaler.transform(X)
 
-df_scoring["score_probabilidad"] = probs
-df_scoring["score_probabilidad"] = df_scoring["score_probabilidad"].astype(float)
+    # ==============================
+    # Predicción
+    # ==============================
 
-# ==============================
-# Segmentación de prioridad
-# ==============================
+    print("Generando predicciones...")
+    probs = model.predict(X_scaled)
 
-def asignar_prioridad(p):
-    if p >= 0.7:
-        return "Alta"
-    elif p >= 0.4:
-        return "Media"
-    else:
-        return "Baja"
+    df_scoring["score_probabilidad"] = probs
+    df_scoring["score_probabilidad"] = df_scoring["score_probabilidad"].astype(float)
 
-df_scoring["prioridad"] = df_scoring["score_probabilidad"].apply(asignar_prioridad)
+    # ==============================
+    # Segmentación
+    # ==============================
 
-# ==============================
-# Guardar resultado
-# ==============================
+    def asignar_prioridad(p):
+        if p >= 0.7:
+            return "Alta"
+        elif p >= 0.4:
+            return "Media"
+        else:
+            return "Baja"
 
-df_scoring.to_parquet(OUTPUT_PATH, index=False)
+    df_scoring["prioridad"] = df_scoring["score_probabilidad"].apply(asignar_prioridad)
 
-print("✔ Scoring batch generado correctamente.")
-print(f"✔ Archivo guardado en {OUTPUT_PATH}")
+    # ==============================
+    # Guardar resultado
+    # ==============================
+
+    df_scoring.to_parquet(OUTPUT_PATH, index=False)
+
+    print("✔ Scoring batch generado correctamente.")
+    print(f"✔ Archivo guardado en {OUTPUT_PATH}")
