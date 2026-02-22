@@ -1,0 +1,12 @@
+data/bronze/*
+data/silver/*
+data/gold/*
+models/local/*
+models/registry/*
+artifacts/*
+.DS_Store
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.env
+venv/
