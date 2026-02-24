@@ -9,17 +9,16 @@ from sklearn.metrics import roc_auc_score, precision_score, recall_score
 def train_model():
 
     # ==============================
-    # Configuración de rutas
+    # RUTAS CLOUD (VERTEX)
     # ==============================
 
-    GOLD_TRAIN_PATH = "data/gold/train.parquet"
-    MODEL_PATH = "models/local/"
-    ARTIFACTS_PATH = "artifacts/"
+    GOLD_TRAIN_PATH = "gs://mlops-cobranza-artifacts-34614/gold/train.parquet"
 
-    os.makedirs(MODEL_PATH, exist_ok=True)
-    os.makedirs(ARTIFACTS_PATH, exist_ok=True)
+    # Directorio especial que Vertex usa para guardar el modelo
+    MODEL_DIR = os.environ.get("AIP_MODEL_DIR", "gs://mlops-cobranza-artifacts-34614/models/")
+    ARTIFACTS_DIR = os.environ.get("AIP_OUTPUT_DIR", "gs://mlops-cobranza-artifacts-34614/artifacts/")
 
-    print("Cargando dataset Gold...")
+    print("Cargando dataset Gold desde GCS...")
 
     df = pd.read_parquet(GOLD_TRAIN_PATH)
 
@@ -29,7 +28,7 @@ def train_model():
     y = df[TARGET].values
 
     # ==============================
-    # Definición del modelo
+    # MODELO
     # ==============================
 
     model = tf.keras.Sequential([
@@ -56,7 +55,7 @@ def train_model():
 
     print("Entrenando modelo...")
 
-    history = model.fit(
+    model.fit(
         X,
         y,
         epochs=20,
@@ -66,33 +65,30 @@ def train_model():
     )
 
     # ==============================
-    # Evaluación final
+    # MÉTRICAS
     # ==============================
 
     y_pred_proba = model.predict(X)
     y_pred = (y_pred_proba > 0.5).astype(int)
 
-    auc = roc_auc_score(y, y_pred_proba)
-    precision = precision_score(y, y_pred)
-    recall = recall_score(y, y_pred)
-
     metrics = {
-        "AUC": float(auc),
-        "Precision": float(precision),
-        "Recall": float(recall)
+        "AUC": float(roc_auc_score(y, y_pred_proba)),
+        "Precision": float(precision_score(y, y_pred)),
+        "Recall": float(recall_score(y, y_pred))
     }
 
-    print("Resultados del modelo:")
-    print(metrics)
+    print("Resultados:", metrics)
 
     # ==============================
-    # Guardar modelo y métricas
+    # GUARDADO EN GCS
     # ==============================
 
-    model.save(os.path.join(MODEL_PATH, "model.keras"))
+    model.save(os.path.join(MODEL_DIR, "model.keras"))
 
-    with open(os.path.join(ARTIFACTS_PATH, "metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=4)
+    with open("/tmp/metrics.json", "w") as f:
+        json.dump(metrics, f)
 
-    print("✔ Modelo guardado en models/local/")
-    print("✔ Métricas guardadas en artifacts/")
+    # Subir métricas a GCS
+    os.system(f"gsutil cp /tmp/metrics.json {ARTIFACTS_DIR}/metrics.json")
+
+    print("✔ Modelo y métricas guardados en GCS")
