@@ -18,4 +18,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Ejecutar el pipeline
-CMD ["python", "-u", "-m", "src.pipeline"]
+CMD ["python", "-u", "-m", "src.train_model"]
