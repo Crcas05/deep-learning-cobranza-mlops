@@ -14,9 +14,15 @@ def train_model():
 
     GOLD_TRAIN_PATH = "gs://mlops-cobranza-artifacts-34614/gold/train.parquet"
 
-    # Estas variables las inyecta Vertex automáticamente
-    MODEL_DIR = os.environ["AIP_MODEL_DIR"]
-    ARTIFACTS_DIR = os.environ["AIP_OUTPUT_DIR"]
+    # Obtener variables de entorno de Vertex (con fallback seguro)
+    MODEL_DIR = os.environ.get("AIP_MODEL_DIR")
+    ARTIFACTS_DIR = os.environ.get("AIP_OUTPUT_DIR")
+
+    if MODEL_DIR is None:
+        MODEL_DIR = "/tmp/model"
+
+    if ARTIFACTS_DIR is None:
+        ARTIFACTS_DIR = "/tmp/artifacts"
 
     print("MODEL_DIR:", MODEL_DIR)
     print("ARTIFACTS_DIR:", ARTIFACTS_DIR)
@@ -82,16 +88,15 @@ def train_model():
     print("Resultados:", metrics)
 
     # ==============================
-    # GUARDADO CORRECTO EN VERTEX
+    # GUARDADO
     # ==============================
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
-    # Guardar modelo en directorio especial de Vertex
+    # Guardar modelo
     model_path = os.path.join(MODEL_DIR, "model.keras")
     model.save(model_path)
-
     print(f"Modelo guardado en: {model_path}")
 
     # Guardar métricas
