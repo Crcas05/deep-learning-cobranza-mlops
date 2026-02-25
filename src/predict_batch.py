@@ -3,26 +3,25 @@ import joblib
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+from google.cloud import bigquery
 
 
 def batch_predict():
 
     # ==============================
-    # Rutas
+    # RUTAS CLOUD
     # ==============================
 
-    MODEL_PATH = "models/local/model.keras"
-    SCALER_PATH = "artifacts/scaler.pkl"
-    SILVER_PATH = "data/silver/cobranza_clean.parquet"
-    OUTPUT_PATH = "artifacts/scoring_results.parquet"
+    # Modelo entrenado en GCS
+    MODEL_PATH = "gs://mlops-cobranza-artifacts-34614/model/model.keras"
 
-    print("Cargando modelo...")
+    # Dataset para scoring (puede venir de GCS o BigQuery)
+    SILVER_PATH = "gs://mlops-cobranza-artifacts-34614/silver/cobranza_clean.parquet"
+
+    print("Cargando modelo desde GCS...")
     model = tf.keras.models.load_model(MODEL_PATH)
 
-    print("Cargando scaler...")
-    scaler = joblib.load(SCALER_PATH)
-
-    print("Cargando datos Silver...")
+    print("Cargando datos Silver desde GCS...")
     df = pd.read_parquet(SILVER_PATH)
 
     TARGET = "pago_30d"
@@ -32,18 +31,14 @@ def batch_predict():
     # Separar features
     X = df.drop(columns=[TARGET]).values
 
-    # Escalar
-    X_scaled = scaler.transform(X)
-
     # ==============================
     # Predicción
     # ==============================
 
     print("Generando predicciones...")
-    probs = model.predict(X_scaled)
+    probs = model.predict(X)
 
-    df_scoring["score_probabilidad"] = probs
-    df_scoring["score_probabilidad"] = df_scoring["score_probabilidad"].astype(float)
+    df_scoring["score_probabilidad"] = probs.astype(float)
 
     # ==============================
     # Segmentación
@@ -60,10 +55,21 @@ def batch_predict():
     df_scoring["prioridad"] = df_scoring["score_probabilidad"].apply(asignar_prioridad)
 
     # ==============================
-    # Guardar resultado
+    # Guardar en BigQuery
     # ==============================
 
-    df_scoring.to_parquet(OUTPUT_PATH, index=False)
+    print("Guardando predicciones en BigQuery...")
 
-    print("✔ Scoring batch generado correctamente.")
-    print(f"✔ Archivo guardado en {OUTPUT_PATH}")
+    client = bigquery.Client()
+
+    table_id = "solid-league-440122-i6.mlops_cobranza.predicciones_batch"
+
+    job = client.load_table_from_dataframe(df_scoring, table_id)
+
+    job.result()
+
+    print("✔ Predicciones guardadas en BigQuery correctamente.")
+
+
+if __name__ == "__main__":
+    batch_predict()
