@@ -13,7 +13,7 @@ def batch_predict():
     # ==============================
 
     MODEL_PATH = "gs://mlops-cobranza-artifacts-34614/model/model.keras"
-    SILVER_PATH = "gs://mlops-cobranza-artifacts-34614/silver/cobranza_clean.parquet"
+    SILVER_PATH = "gs://mlops-cobranza-artifacts-34614/model/silver/cobranza_clean.parquet"
 
     print("Cargando modelo desde GCS...")
     model = tf.keras.models.load_model(MODEL_PATH)
