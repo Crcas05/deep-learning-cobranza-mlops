@@ -1,1 +1,45 @@
+name: MLOps CI/CD - Docker Build & Push
 
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: solid-league-440122-i6
+  REGION: us-central1
+  REPOSITORY: mlops-pipeline
+  IMAGE_NAME: mlops-cobranza
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/478543807264/locations/global/workloadIdentityPools/mlops-cobranza-pool/providers/github-provider
+          service_account: github-actions-sa@solid-league-440122-i6.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to use Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Docker image
+        run: |
+          docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:${{ github.sha }} .
+
+      - name: Push Docker image
+        run: |
+          docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:${{ github.sha }}
