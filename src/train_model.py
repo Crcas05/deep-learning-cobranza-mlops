@@ -14,12 +14,14 @@ def train_model():
 
     GOLD_TRAIN_PATH = "gs://mlops-cobranza-artifacts-34614/gold/train.parquet"
 
-    # Directorio especial que Vertex usa para guardar el modelo
-    MODEL_DIR = os.environ.get("AIP_MODEL_DIR", "gs://mlops-cobranza-artifacts-34614/models/")
-    ARTIFACTS_DIR = os.environ.get("AIP_OUTPUT_DIR", "gs://mlops-cobranza-artifacts-34614/artifacts/")
+    # Estas variables las inyecta Vertex automáticamente
+    MODEL_DIR = os.environ["AIP_MODEL_DIR"]
+    ARTIFACTS_DIR = os.environ["AIP_OUTPUT_DIR"]
+
+    print("MODEL_DIR:", MODEL_DIR)
+    print("ARTIFACTS_DIR:", ARTIFACTS_DIR)
 
     print("Cargando dataset Gold desde GCS...")
-
     df = pd.read_parquet(GOLD_TRAIN_PATH)
 
     TARGET = "pago_30d"
@@ -80,15 +82,25 @@ def train_model():
     print("Resultados:", metrics)
 
     # ==============================
-    # GUARDADO EN GCS
+    # GUARDADO CORRECTO EN VERTEX
     # ==============================
 
-    model.save(os.path.join(MODEL_DIR, "model.keras"))
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
-    with open("/tmp/metrics.json", "w") as f:
+    # Guardar modelo en directorio especial de Vertex
+    model_path = os.path.join(MODEL_DIR, "model.keras")
+    model.save(model_path)
+
+    print(f"Modelo guardado en: {model_path}")
+
+    # Guardar métricas
+    metrics_path = os.path.join(ARTIFACTS_DIR, "metrics.json")
+    with open(metrics_path, "w") as f:
         json.dump(metrics, f)
 
-    # Subir métricas a GCS
-    os.system(f"gsutil cp /tmp/metrics.json {ARTIFACTS_DIR}/metrics.json")
+    print(f"Métricas guardadas en: {metrics_path}")
 
-    print("✔ Modelo y métricas guardados en GCS")
+
+if __name__ == "__main__":
+    train_model()
