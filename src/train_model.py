@@ -1,111 +1,86 @@
 import os
-import json
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from sklearn.metrics import roc_auc_score, precision_score, recall_score
+from google.cloud import bigquery
 
 
-def train_model():
+def batch_predict():
 
     # ==============================
-    # RUTAS CLOUD (VERTEX)
+    # RUTAS CLOUD (CORREGIDAS)
     # ==============================
 
-    GOLD_TRAIN_PATH = "gs://mlops-cobranza-artifacts-34614/gold/train.parquet"
+    MODEL_PATH = "gs://mlops-cobranza-artifacts-34614/model/model.keras"
+    SILVER_PATH = "gs://mlops-cobranza-artifacts-34614/model/silver/cobranza_clean.parquet"
 
-    # Obtener variables de entorno de Vertex (con fallback seguro)
-    MODEL_DIR = os.environ.get("AIP_MODEL_DIR")
-    ARTIFACTS_DIR = os.environ.get("AIP_OUTPUT_DIR")
+    print("Cargando modelo desde GCS...")
+    model = tf.keras.models.load_model(MODEL_PATH)
 
-    if MODEL_DIR is None:
-        MODEL_DIR = "/tmp/model"
-
-    if ARTIFACTS_DIR is None:
-        ARTIFACTS_DIR = "/tmp/artifacts"
-
-    print("MODEL_DIR:", MODEL_DIR)
-    print("ARTIFACTS_DIR:", ARTIFACTS_DIR)
-
-    print("Cargando dataset Gold desde GCS...")
-    df = pd.read_parquet(GOLD_TRAIN_PATH)
+    print("Cargando datos Silver desde GCS...")
+    df = pd.read_parquet(SILVER_PATH)
 
     TARGET = "pago_30d"
 
-    X = df.drop(columns=[TARGET]).values
-    y = df[TARGET].values
+    df_scoring = df.copy()
 
     # ==============================
-    # MODELO
+    # Separar features si existe target
     # ==============================
 
-    model = tf.keras.Sequential([
-        tf.keras.layers.Dense(64, activation="relu", input_shape=(X.shape[1],)),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Dropout(0.3),
+    if TARGET in df.columns:
+        X = df.drop(columns=[TARGET])
+    else:
+        X = df
 
-        tf.keras.layers.Dense(32, activation="relu"),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Dropout(0.2),
+    # ==============================
+    # Predicción
+    # ==============================
 
-        tf.keras.layers.Dense(1, activation="sigmoid")
-    ])
+    print("Generando predicciones...")
+    probs = model.predict(X)
+    probs = probs.flatten()
 
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
-        loss="binary_crossentropy",
-        metrics=[
-            tf.keras.metrics.AUC(name="auc"),
-            tf.keras.metrics.Precision(name="precision"),
-            tf.keras.metrics.Recall(name="recall")
-        ]
+    df_scoring["score_probabilidad"] = probs.astype(float)
+
+    # ==============================
+    # Segmentación
+    # ==============================
+
+    def asignar_prioridad(p):
+        if p >= 0.7:
+            return "Alta"
+        elif p >= 0.4:
+            return "Media"
+        else:
+            return "Baja"
+
+    df_scoring["prioridad"] = df_scoring["score_probabilidad"].apply(asignar_prioridad)
+
+    # ==============================
+    # Guardar en BigQuery
+    # ==============================
+
+    print("Guardando predicciones en BigQuery...")
+
+    client = bigquery.Client()
+
+    table_id = "solid-league-440122-i6.mlops_cobranza.predicciones_batch"
+
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND"
     )
 
-    print("Entrenando modelo...")
-
-    model.fit(
-        X,
-        y,
-        epochs=20,
-        batch_size=256,
-        validation_split=0.2,
-        verbose=1
+    job = client.load_table_from_dataframe(
+        df_scoring,
+        table_id,
+        job_config=job_config
     )
 
-    # ==============================
-    # MÉTRICAS
-    # ==============================
+    job.result()
 
-    y_pred_proba = model.predict(X)
-    y_pred = (y_pred_proba > 0.5).astype(int)
-
-    metrics = {
-        "AUC": float(roc_auc_score(y, y_pred_proba)),
-        "Precision": float(precision_score(y, y_pred)),
-        "Recall": float(recall_score(y, y_pred))
-    }
-
-    print("Resultados:", metrics)
-
-    # ==============================
-    # GUARDADO
-    # ==============================
-
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
-
-    # Guardar modelo
-    model_path = os.path.join(MODEL_DIR, "model.keras")
-    model.save(model_path)
-    print(f"Modelo guardado en: {model_path}")
-
-    # Guardar métricas
-    metrics_path = os.path.join(ARTIFACTS_DIR, "metrics.json")
-    with open(metrics_path, "w") as f:
-        json.dump(metrics, f)
-
-    print(f"Métricas guardadas en: {metrics_path}")
+    print("✔ Predicciones guardadas en BigQuery correctamente.")
 
 
 if __name__ == "__main__":
-    train_model()
+    batch_predict()
