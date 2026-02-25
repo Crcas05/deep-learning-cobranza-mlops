@@ -12,10 +12,7 @@ def batch_predict():
     # RUTAS CLOUD
     # ==============================
 
-    # Modelo entrenado en GCS
     MODEL_PATH = "gs://mlops-cobranza-artifacts-34614/model/model.keras"
-
-    # Dataset para scoring (puede venir de GCS o BigQuery)
     SILVER_PATH = "gs://mlops-cobranza-artifacts-34614/silver/cobranza_clean.parquet"
 
     print("Cargando modelo desde GCS...")
@@ -28,8 +25,19 @@ def batch_predict():
 
     df_scoring = df.copy()
 
-    # Separar features
-    X = df.drop(columns=[TARGET]).values
+    # ==============================
+    # Preparar features correctamente
+    # ==============================
+
+    if TARGET in df.columns:
+        print("Columna target encontrada. Eliminándola para inferencia.")
+        X = df.drop(columns=[TARGET])
+    else:
+        print("Columna target NO encontrada. Usando todas las columnas como features.")
+        X = df
+
+    # Asegurar que sea numpy array
+    X = X.values
 
     # ==============================
     # Predicción
@@ -37,6 +45,10 @@ def batch_predict():
 
     print("Generando predicciones...")
     probs = model.predict(X)
+
+    # Si viene como array 2D (ej: [[0.8], [0.3]])
+    if len(probs.shape) > 1:
+        probs = probs.flatten()
 
     df_scoring["score_probabilidad"] = probs.astype(float)
 
@@ -64,7 +76,15 @@ def batch_predict():
 
     table_id = "solid-league-440122-i6.mlops_cobranza.predicciones_batch"
 
-    job = client.load_table_from_dataframe(df_scoring, table_id)
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND"  # agrega registros
+    )
+
+    job = client.load_table_from_dataframe(
+        df_scoring,
+        table_id,
+        job_config=job_config
+    )
 
     job.result()
 
